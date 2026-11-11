@@ -1,0 +1,24 @@
+# Python bytecode & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Ephemeral runtime state & rotated audit logs
+state/audit_log.jsonl
+state/audit_log.jsonl.*.bak
+state/audit_corrupt.jsonl
+state/hook_errors.log
+state/.pre_tool_hashes.json
+state/epistemic_manifest.json
+
+# Scratch & clean-room iteration sandboxes
+scratch/
+.iterate_stage/
+iterate_stage/
+
+# OS metadata
+.DS_Store
+Thumbs.db
