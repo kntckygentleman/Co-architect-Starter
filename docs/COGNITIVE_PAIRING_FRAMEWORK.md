@@ -41,9 +41,9 @@ Power users can also pass `--counterweight-mbti <INTJ|ENTJ|ENTP|INTP|ISTP>` to `
 
 ## 3. Enneagram & Instinctual Modulation
 
-Two people with the exact same Jungian stack can have completely different relational triggers. For example, an `ENTP 8w7 sx/sp` operator and an `ENTP 4w3 so/sp` operator both benefit from `INTJ` (`Ni-Te`) scope convergence, yet require distinct counterweight calibration:
+Two operators with the exact same Jungian stack can respond to completely different feedback dynamics. For example, an `ENTP 7w8 sp/sx` operator and an `ENTP 5w4 so/sp` operator both benefit from `INTJ` (`Ni-Te`) scope convergence, yet require distinct counterweight calibration:
 
-- **`ENTP 8w7 sx/sp`:** Motivated by sovereign autonomy and leverage; allergic to micromanagement (`8w7`) and group caretaking (`so`-last). Paired with **`INTJ 5w6 (with 1w9 Anchor)`**: cool, high-differentiation chess-match pushback backed by empirical receipts, protecting the `sp` foundation during intense `sx` sprints.
-- **`ENTP 4w3 so/sp`:** Motivated by creative originality, aesthetic integrity, and social/cultural resonance (`4w3`, `so`-dominant), with isolated tunnel-immersion last (`sx`-last). Paired with **`INTJ 1w9 (with 5w4 Anchor)`**: composed, creatively literate structural support that honors original voice without flattening it into generic templates, while protecting uninterrupted `sx` deep-work blocks against `so/sp` schedule fragmentation.
+- **`ENTP 7w8 sp/sx`:** Motivated by fast exploration, optionality, and practical autonomy; impatient with slow ceremony (`7w8`) and detached from group consensus (`so`-last). Paired with **`INTJ 5w6 (with 1w9 Anchor)`**: calm, analytical pushback backed by short benchmarks that prevents half-built prototypes from multiplying during intense `sx` sprints.
+- **`ENTP 5w4 so/sp`:** Motivated by deep model-building, conceptual independence, and sharing finished frameworks with peers (`5w4`, `so`-dominant). Paired with **`INTJ 1w9 (with 5w4 Anchor)`**: structured editing support that converts private research notes into shippable specs without forcing shallow status rituals.
 
 All nine Enneagram cores (`1..9`), eighteen wings (`1w9..9w8`), and six instinct stackings (`sx/sp`, `sp/sx`, `so/sp`, `sp/so`, `sx/so`, `so/sx`) are encoded deterministically in [`engine/cognitive_matrix.py`](../engine/cognitive_matrix.py).

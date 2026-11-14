@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 from typing import Any
 
@@ -26,6 +27,8 @@ from core_hooks import (  # noqa: E402
     dispatch_hook_cli,
     evaluate_base_pre_tool_use,
     handle_post_tool_use as _core_handle_post_tool_use,
+    lint_markdown_slop,
+    lint_security_payload,
     resolve_workspace_root,
 )
 
@@ -33,7 +36,11 @@ WORKSPACE_ROOT = resolve_workspace_root(__file__)
 
 FALLBACK_LOCKED_REL_PATHS: tuple[str, ...] = (
     "SYSTEM_PROMPT.md",
+    "AGENTS.md",
+    "CLAUDE.md",
     "GEMINI.md",
+    ".claude/settings.json",
+    ".cursor/rules/coarchitect.mdc",
     "state/workspace_config.json",
     ".agents/hooks.json",
     ".agents/rules/human-voice.md",
@@ -128,7 +135,89 @@ def handle_session_start(_payload: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def check_files(
+    paths: list[str],
+    *,
+    staged: bool = False,
+    ws_root: str = WORKSPACE_ROOT,
+) -> int:
+    """Enforce core lock, hidden-Unicode security, and anti-slop rules for CLI/git hooks."""
+    candidates: list[str] = list(paths)
+    if staged:
+        proc = subprocess.run(
+            ["git", "-C", ws_root, "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode == 0:
+            for line in proc.stdout.splitlines():
+                trimmed = line.strip()
+                if trimmed and trimmed not in candidates:
+                    candidates.append(trimmed)
+
+    if not candidates:
+        return 0
+
+    cfg = load_workspace_config(ws_root)
+    rel_list = tuple(str(x) for x in (cfg.get("locked_rel_paths") or FALLBACK_LOCKED_REL_PATHS))
+    locked_paths = {
+        os.path.normcase(os.path.realpath(os.path.join(ws_root, *rel.split("/"))))
+        for rel in rel_list
+    }
+    locked_rel_norm = {rel.replace("\\", "/").lstrip("./") for rel in rel_list}
+    debug_override = os.environ.get("COARCHITECT_DEBUG", "").strip() == "1"
+
+    violations: list[str] = []
+    ws_real = os.path.realpath(ws_root)
+    for raw_p in candidates:
+        p = Path(raw_p)
+        if not p.is_absolute():
+            p = Path(ws_root) / raw_p
+        resolved_str = os.path.realpath(str(p))
+        try:
+            rel_posix = os.path.relpath(resolved_str, ws_real).replace("\\", "/")
+        except ValueError:
+            rel_posix = raw_p.replace("\\", "/").lstrip("./")
+        norm_resolved = os.path.normcase(resolved_str)
+
+        if (norm_resolved in locked_paths or rel_posix in locked_rel_norm) and not debug_override:
+            violations.append(
+                f"{rel_posix}: Core Architecture Lock violation (set COARCHITECT_DEBUG=1 to override)."
+            )
+
+        if not p.is_file():
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        is_state_cache = rel_posix.startswith("state/")
+        sec_err = lint_security_payload(rel_posix, text, check_stored_injection=is_state_cache)
+        if sec_err:
+            violations.append(f"{rel_posix}: {sec_err}")
+
+        if rel_posix.lower().endswith(".md"):
+            slop_err = lint_markdown_slop(str(p), text)
+            if slop_err:
+                violations.append(f"{rel_posix}: {slop_err}")
+
+    if violations:
+        for msg in violations:
+            sys.stderr.write(msg + "\n")
+        sys.stderr.flush()
+        return 1
+    return 0
+
+
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "check-files":
+        args = sys.argv[2:]
+        staged = "--staged" in args
+        file_args = [a for a in args if a != "--staged"]
+        sys.exit(check_files(file_args, staged=staged, ws_root=WORKSPACE_ROOT))
+
     cfg = load_workspace_config(WORKSPACE_ROOT)
     dispatch_hook_cli(
         workspace_root=WORKSPACE_ROOT,

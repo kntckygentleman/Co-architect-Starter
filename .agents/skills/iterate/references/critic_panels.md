@@ -1,6 +1,6 @@
 # Clean-Room Critic Panel Specifications (`/iterate`)
 
-All seats inherit the **Veil of Ignorance** and **125-Word Output Contract** from `GEMINI.md` and register via `define_subagent` (`EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false`). For the 7-seat Full Council (`council-intj` through `council-entp`), read [`../../council/references/personas.md`](../../council/references/personas.md).
+All seats inherit the **Veil of Ignorance** and **125-Word Output Contract** from `SYSTEM_PROMPT.md` (mirrored to `AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`) and run as read-only, tool-restricted subagents (`define_subagent` with `EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false`, or read-only `Task`/`Agent` workers). For the 7-seat Full Council (`council-intj` through `council-entp`), read [`../../council/references/personas.md`](../../council/references/personas.md).
 
 ## Optional 3-Seat Domain Panels (`2x 1.0x Primary + 1x 0.5x Devil's Advocate`)
 

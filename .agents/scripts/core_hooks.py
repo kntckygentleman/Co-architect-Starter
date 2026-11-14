@@ -683,6 +683,142 @@ def _classify_exogenous_lookup(tool_name: str, args: dict[str, Any]) -> tuple[st
     return "TIER_3_UNVERIFIED_WEB", host or "web-search", q
 
 
+_CLAUDE_SUBAGENT_MODEL_MAP: dict[str, str] = {
+    "haiku": "flash",
+    "claude-haiku": "flash",
+    "fast": "flash_lite",
+    "flash": "flash",
+    "flash_lite": "flash_lite",
+    "sonnet": "pro",
+    "claude-sonnet": "pro",
+    "pro": "pro",
+    "opus": "inherit",
+    "claude-opus": "inherit",
+    "inherit": "inherit",
+}
+
+
+def normalize_hook_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize Antigravity (`toolCall`) and Claude Code (`tool_name`/`tool_input`) payloads."""
+    if not isinstance(payload, dict):
+        return {"_hook_platform": "antigravity", "toolCall": {}}
+    out = dict(payload)
+    if "toolCall" in out and isinstance(out["toolCall"], dict):
+        out.setdefault("_hook_platform", "antigravity")
+        return out
+
+    is_claude = any(k in out for k in ("tool_name", "hook_event_name", "session_id"))
+    out.setdefault("_hook_platform", "claude" if is_claude else "antigravity")
+
+    if "conversationId" not in out and "session_id" in out:
+        out["conversationId"] = out.get("session_id")
+    if "lastUserInput" not in out:
+        for key in ("prompt", "last_user_message", "user_prompt"):
+            if key in out and out[key] is not None:
+                out["lastUserInput"] = out[key]
+                break
+    if "toolResponse" not in out and "tool_response" in out:
+        out["toolResponse"] = out.get("tool_response")
+
+    raw_tool = str(out.get("tool_name") or "").strip()
+    if not raw_tool:
+        out.setdefault("toolCall", {})
+        return out
+
+    ti = out.get("tool_input")
+    if not isinstance(ti, dict):
+        ti = {}
+
+    if raw_tool == "Write":
+        tc: dict[str, Any] = {
+            "name": "write_file",
+            "args": {
+                "Path": str(ti.get("file_path") or ti.get("path") or ""),
+                "Content": str(ti.get("content") or ""),
+            },
+        }
+    elif raw_tool == "Edit":
+        tc = {
+            "name": "edit_file",
+            "args": {
+                "Path": str(ti.get("file_path") or ti.get("path") or ""),
+                "Target": str(ti.get("old_string") or ""),
+                "Replacement": str(ti.get("new_string") or ""),
+            },
+        }
+    elif raw_tool == "MultiEdit":
+        edits = ti.get("edits") if isinstance(ti.get("edits"), list) else []
+        targets: list[str] = []
+        replacements: list[str] = []
+        for item in edits:
+            if isinstance(item, dict):
+                if isinstance(item.get("old_string"), str):
+                    targets.append(item["old_string"])
+                if isinstance(item.get("new_string"), str):
+                    replacements.append(item["new_string"])
+        tc = {
+            "name": "edit_file",
+            "args": {
+                "Path": str(ti.get("file_path") or ti.get("path") or ""),
+                "Target": "\n".join(targets),
+                "Replacement": "\n".join(replacements),
+            },
+        }
+    elif raw_tool == "Read":
+        tc = {
+            "name": "read_file",
+            "args": {"Path": str(ti.get("file_path") or ti.get("path") or "")},
+        }
+    elif raw_tool == "Bash":
+        tc = {
+            "name": "run_command",
+            "args": {
+                "CommandLine": str(ti.get("command") or ti.get("cmd") or ""),
+                "toolSummary": str(ti.get("description") or ""),
+            },
+        }
+    elif raw_tool in ("Task", "Agent"):
+        sub_type = str(ti.get("subagent_type") or ti.get("type") or ti.get("name") or "worker")
+        has_explicit_model = "model" in ti or "Model" in ti
+        raw_model = str(ti.get("model") or ti.get("Model") or "").strip()
+        if not has_explicit_model:
+            norm_model = (
+                "flash"
+                if (sub_type.lower() in FLASH_ONLY_SUBAGENT_TYPES or sub_type.lower().endswith("-worker"))
+                else "pro"
+            )
+        else:
+            norm_model = _CLAUDE_SUBAGENT_MODEL_MAP.get(raw_model.lower(), raw_model)
+        tc = {
+            "name": "invoke_subagent",
+            "args": {
+                "TypeName": sub_type,
+                "Role": str(ti.get("description") or ti.get("name") or ""),
+                "Prompt": str(ti.get("prompt") or ""),
+                "Model": norm_model,
+            },
+        }
+    elif raw_tool == "WebSearch":
+        tc = {"name": "search_web", "args": {"query": str(ti.get("query") or "")}}
+    elif raw_tool == "WebFetch":
+        url_val = str(ti.get("url") or "")
+        tc = {
+            "name": "read_url_content",
+            "args": {"Url": url_val, "url": url_val, "query": str(ti.get("prompt") or "")},
+        }
+    elif raw_tool.startswith("mcp__") and raw_tool.count("__") >= 2:
+        _, srv_name, mcp_tool_name = raw_tool.split("__", 2)
+        tc = {
+            "name": "call_mcp_tool",
+            "args": {"ServerName": srv_name, "ToolName": mcp_tool_name, "Arguments": dict(ti)},
+        }
+    else:
+        tc = {"name": raw_tool, "args": dict(ti)}
+
+    out["toolCall"] = tc
+    return out
+
+
 def evaluate_base_pre_tool_use(
     payload: dict[str, Any],
     *,
@@ -693,6 +829,7 @@ def evaluate_base_pre_tool_use(
     default_kortex_account: str = "",
     default_notebook_id: str = "",
 ) -> dict[str, Any]:
+    payload = normalize_hook_payload(payload)
     tool_call = payload.get("toolCall") or {}
     tool_name = tool_call.get("name", "")
     args = tool_call.get("args") or {}
@@ -877,8 +1014,10 @@ def evaluate_base_pre_tool_use(
                 "decision": "deny",
                 "reason": (
                     f"Subagent Model Tiering Gate: 'Model' must be explicitly set to one of "
-                    f"{list(VALID_SUBAGENT_MODELS)} (received {sub_model!r}). Pass 'flash' for "
-                    "workers and Round 2+ diffs, or 'pro' for Round 1 /iterate panels and /council."
+                    f"{list(VALID_SUBAGENT_MODELS)} (received {sub_model!r}). 'hydrogen', "
+                    "'orchestrator', 'carbon', and 'argon' are Parent UI / API models; pass "
+                    "'flash' for workers and Round 2+ diffs, or 'pro' for Round 1 /iterate "
+                    "panels and /council."
                 ),
             }
         if (
@@ -890,7 +1029,7 @@ def evaluate_base_pre_tool_use(
                 "decision": "deny",
                 "reason": (
                     f"Subagent Model Tiering Gate: '{sub_type or sub_role}' must use "
-                    "Model='flash' (or 'flash_lite') to protect frontier model quota."
+                    "Model='flash' (or 'flash_lite') to protect shared frontier model quota."
                 ),
             }
         if sub_model == "inherit":
@@ -901,7 +1040,8 @@ def evaluate_base_pre_tool_use(
                     "decision": "deny",
                     "reason": (
                         "Subagent Model Tiering Gate: Model='inherit' clones the active Parent UI "
-                        "model across spawned subagents and can drain frontier quota. Default to "
+                        "model (including Carbon or Orchestrator (Carbon) planning turns) across "
+                        "spawned subagents and can drain shared frontier quota. Default to "
                         "Model='pro' for /council and Round 1 /iterate, or explicitly include "
                         "'--deep', '[DEEP_COUNCIL]', '[RELEASE_GATE]', or '[CARBON_INHERIT]' in "
                         "both the operator prompt and subagent prompt."
@@ -1025,6 +1165,7 @@ def handle_post_tool_use(
     workspace_root: str,
     tz_name: str | None = None,
 ) -> dict[str, Any]:
+    payload = normalize_hook_payload(payload)
     tool_call = payload.get("toolCall") or {}
     tool_name = tool_call.get("name", "")
     if not tool_name:
@@ -1158,6 +1299,12 @@ def handle_post_tool_use(
         category = "SUBAGENT"
         target = sub_type
         summary = f"{sub_role} [model={sub_model}]".strip()
+    elif tool_name == "read_file":
+        raw_path = str(args.get("Path") or "")
+        category = "READ_QUERY"
+        mutated = False
+        target = raw_path
+        summary = f"read_file ({os.path.basename(raw_path) or raw_path})"
     elif tool_name == "call_mcp_tool":
         server = str(args.get("ServerName") or "")
         mcp_tool = str(args.get("ToolName") or "")
@@ -1221,12 +1368,14 @@ def check_session_start_anomalies(
             alerts.append(f"System anomaly log non-empty: {err_rel} ({os.path.getsize(err_p)}B).")
 
     sys_p = os.path.join(workspace_root, "SYSTEM_PROMPT.md")
-    gem_p = os.path.join(workspace_root, "GEMINI.md")
-    if os.path.isfile(sys_p) and os.path.isfile(gem_p):
+    if os.path.isfile(sys_p):
         sha_s, _ = file_sha256_and_size(sys_p)
-        sha_g, _ = file_sha256_and_size(gem_p)
-        if sha_s and sha_g and sha_s != sha_g:
-            alerts.append("SYSTEM_PROMPT.md and GEMINI.md SHA-256 mismatch detected.")
+        for mirror_name in ("AGENTS.md", "GEMINI.md", "CLAUDE.md"):
+            m_p = os.path.join(workspace_root, mirror_name)
+            if os.path.isfile(m_p):
+                sha_m, _ = file_sha256_and_size(m_p)
+                if sha_s and sha_m and sha_s != sha_m:
+                    alerts.append(f"SYSTEM_PROMPT.md and {mirror_name} SHA-256 mismatch detected.")
 
     return alerts
 
@@ -1300,18 +1449,30 @@ def dispatch_hook_cli(
             raw_stdin = sys.stdin.read()
         except Exception:
             raw_stdin = ""
-    payload: dict[str, Any] = {}
+    raw_payload: dict[str, Any] = {}
     if raw_stdin.strip():
         try:
             parsed = json.loads(raw_stdin)
             if isinstance(parsed, dict):
-                payload = parsed
+                raw_payload = parsed
         except json.JSONDecodeError:
-            payload = {}
+            raw_payload = {}
+
+    payload = normalize_hook_payload(raw_payload)
+    is_claude = payload.get("_hook_platform") == "claude"
+    exit_code = 0
 
     audit_log_path = os.path.join(workspace_root, "state", "audit_log.jsonl")
     if event_name == "SessionStart":
         out = session_handler(payload)
+        if is_claude and isinstance(out, dict) and out.get("additionalContext"):
+            out = {
+                **out,
+                "hookSpecificOutput": {
+                    "hookEventName": "SessionStart",
+                    "additionalContext": out["additionalContext"],
+                },
+            }
     elif event_name == "PreToolUse":
         out = pre_handler(payload)
         if out.get("decision") == "deny":
@@ -1341,6 +1502,27 @@ def dispatch_hook_cli(
                 )
             except Exception:
                 pass
+            if is_claude:
+                reason_txt = str(out.get("reason") or "Blocked by workspace policy.")
+                out = {
+                    **out,
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": reason_txt,
+                    },
+                }
+                sys.stderr.write(reason_txt + "\n")
+                sys.stderr.flush()
+                exit_code = 2
+        elif is_claude and isinstance(out, dict) and out.get("decision") == "allow":
+            out = {
+                **out,
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                },
+            }
     elif event_name == "PostToolUse":
         out = post_handler(payload)
     else:
@@ -1348,3 +1530,5 @@ def dispatch_hook_cli(
 
     sys.stdout.write(json.dumps(out or {}, ensure_ascii=False) + "\n")
     sys.stdout.flush()
+    if exit_code:
+        sys.exit(exit_code)

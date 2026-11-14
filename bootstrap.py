@@ -2,9 +2,10 @@
 """Cross-Platform Self-Assembling Co-Architect Bootstrap CLI (`bootstrap.py`).
 
 Zero external dependencies (Python 3.9+ stdlib).
-Detects host OS/Python/timezone, scores the optional 6-dilemma cognitive interview,
-synthesizes the Operator <-> Co-Architect dyadic counterweight, writes cross-platform
-Antigravity hooks and L1 state caches, and verifies the live harness end-to-end.
+Detects host OS/Python/timezone and available agent runtimes, scores the optional 6-dilemma
+cognitive interview, synthesizes the Operator <-> Co-Architect dyadic counterweight, writes
+cross-platform hooks, platform prompts, pluggable SSoT templates, and L1 state caches, and
+verifies the live harness end-to-end.
 """
 
 from __future__ import annotations
@@ -41,15 +42,58 @@ from engine.cognitive_matrix import (  # noqa: E402
 )
 from engine.host_probe import detect_host_environment  # noqa: E402
 from engine.renderer import (  # noqa: E402
+    SSOT_SPECS,
     render_active_sprint_md,
     render_archive_decisions_md,
+    render_claude_settings_json,
+    render_cursor_rule_mdc,
+    render_git_precommit_hook,
     render_hooks_json,
+    render_local_ssot_canon_md,
     render_operator_profile_md,
     render_routing_matrix_md,
     render_state_hydration_rule,
     render_system_prompt,
     render_workspace_config_json,
 )
+
+PLATFORM_CHOICES = ("auto", "all", "antigravity", "claude", "cursor", "codex", "generic")
+SSOT_CHOICES = tuple(SSOT_SPECS.keys())
+BOOTSTRAP_MARKER = "# CO-ARCHITECT STARTER: BOOTSTRAP MODE"
+
+
+def _resolve_platforms(raw_platform: str, host_info: dict[str, Any]) -> list[str]:
+    mode = (raw_platform or "auto").strip().lower()
+    if mode == "all":
+        return ["antigravity", "claude", "cursor", "codex", "agents_md"]
+    if mode == "antigravity":
+        return ["antigravity", "agents_md"]
+    if mode == "claude":
+        return ["claude", "agents_md"]
+    if mode == "cursor":
+        return ["cursor", "agents_md"]
+    if mode in ("codex", "generic"):
+        return ["codex", "agents_md"] if mode == "codex" else ["agents_md"]
+
+    detected = [p for p in (host_info.get("detected_platforms") or []) if p != "agents_md"]
+    if "agents_md" not in detected:
+        detected.append("agents_md")
+    return detected
+
+
+def _resolve_ssot_args(ssot: str, ssot_target: str, notebook_id: str) -> tuple[str, str]:
+    backend = (ssot or "local").strip().lower()
+    if backend not in SSOT_SPECS:
+        backend = "custom"
+    target = (ssot_target or "").strip()
+    nb_id = (notebook_id or "").strip()
+    if nb_id and backend == "local":
+        backend = "notebooklm"
+    if backend == "notebooklm" and not target and nb_id:
+        target = nb_id
+    if not target:
+        target = SSOT_SPECS[backend]["default_target"]
+    return backend, target
 
 
 def _copy_agents_tree_if_external(target_dir: Path) -> None:
@@ -134,10 +178,10 @@ def verify_installation(target_dir: Path) -> dict[str, Any]:
         "PreToolUse",
         {
             "conversationId": "bootstrap-verify",
-            "lastUserInput": "Please rewrite GEMINI.md for me",
+            "lastUserInput": "Please rewrite SYSTEM_PROMPT.md for me",
             "toolCall": {
                 "name": "write_file",
-                "args": {"Path": str(ws_root / "GEMINI.md"), "Content": "# Overwrite"},
+                "args": {"Path": str(ws_root / "SYSTEM_PROMPT.md"), "Content": "# Overwrite"},
             },
         },
         ws_root,
@@ -259,6 +303,9 @@ def cmd_preview(args: argparse.Namespace) -> int:
         domains=domains,
         custom_notes=args.notes,
     )
+    ssot_backend, ssot_target = _resolve_ssot_args(args.ssot, args.ssot_target, "")
+    spec["platform"] = args.platform
+    spec["ssot"] = {"backend": ssot_backend, "target": ssot_target}
     print(json.dumps(spec, indent=2))
     return 0
 
@@ -298,10 +345,24 @@ def cmd_build(args: argparse.Namespace) -> int:
     _copy_agents_tree_if_external(target_dir)
     host_info = detect_host_environment(target_dir)
     today_iso = now_local(host_info["timezone"]).date().isoformat()
+    selected_platforms = _resolve_platforms(args.platform, host_info)
+    ssot_backend, ssot_target = _resolve_ssot_args(args.ssot, args.ssot_target, args.notebook_id)
 
     sys_prompt_md = render_system_prompt(spec)
-    op_profile_md = render_operator_profile_md(spec, host_info, today_iso)
-    routing_md = render_routing_matrix_md(host_info, today_iso)
+    op_profile_md = render_operator_profile_md(
+        spec,
+        host_info,
+        today_iso,
+        ssot_backend=ssot_backend,
+        ssot_target=ssot_target,
+        platforms=selected_platforms,
+    )
+    routing_md = render_routing_matrix_md(
+        host_info,
+        today_iso,
+        ssot_backend=ssot_backend,
+        ssot_target=ssot_target,
+    )
     sprint_md = render_active_sprint_md(spec, today_iso)
     adr_md = render_archive_decisions_md(spec, host_info, today_iso)
     hydration_md = render_state_hydration_rule(op_profile_md, routing_md, sprint_md)
@@ -311,17 +372,67 @@ def cmd_build(args: argparse.Namespace) -> int:
         host_info,
         kortex_account=args.kortex_account,
         default_notebook_id=args.notebook_id,
+        ssot_backend=ssot_backend,
+        ssot_target=ssot_target,
+        platforms=selected_platforms,
     )
 
-    md_targets = {
+    md_targets: dict[str, str] = {
         "SYSTEM_PROMPT.md": sys_prompt_md,
-        "GEMINI.md": sys_prompt_md,
+        "AGENTS.md": sys_prompt_md,
         ".agents/rules/state-hydration.md": hydration_md,
         "state/operator_profile.md": op_profile_md,
         "state/routing_matrix.md": routing_md,
         "state/active_sprint.md": sprint_md,
         "state/archive_decisions.md": adr_md,
     }
+    raw_targets: dict[str, str] = {
+        "state/workspace_config.json": ws_cfg_str,
+        ".agents/hooks.json": hooks_json_str,
+    }
+
+    if "antigravity" in selected_platforms:
+        md_targets["GEMINI.md"] = sys_prompt_md
+    if "claude" in selected_platforms:
+        md_targets["CLAUDE.md"] = sys_prompt_md
+        raw_targets[".claude/settings.json"] = render_claude_settings_json(host_info, target_dir)
+    if "cursor" in selected_platforms:
+        raw_targets[".cursor/rules/coarchitect.mdc"] = render_cursor_rule_mdc(spec)
+
+    if args.platform == "auto":
+        for existing_name in ("GEMINI.md", "CLAUDE.md"):
+            existing_p = target_dir / existing_name
+            if existing_name not in md_targets and existing_p.is_file():
+                try:
+                    if BOOTSTRAP_MARKER in existing_p.read_text(encoding="utf-8", errors="ignore"):
+                        md_targets[existing_name] = sys_prompt_md
+                        if existing_name == "CLAUDE.md" and ".claude/settings.json" not in raw_targets:
+                            raw_targets[".claude/settings.json"] = render_claude_settings_json(
+                                host_info, target_dir
+                            )
+                except OSError:
+                    pass
+    else:
+        for unselected_name in ("GEMINI.md", "CLAUDE.md"):
+            if unselected_name not in md_targets:
+                unselected_p = target_dir / unselected_name
+                if unselected_p.is_file():
+                    try:
+                        if BOOTSTRAP_MARKER in unselected_p.read_text(encoding="utf-8", errors="ignore"):
+                            unselected_p.unlink()
+                    except OSError:
+                        pass
+
+    if ssot_backend == "local":
+        canon_rel = ssot_target or SSOT_SPECS["local"]["default_target"]
+        canon_candidate = (target_dir / canon_rel).resolve()
+        try:
+            rel_checked = canon_candidate.relative_to(target_dir)
+            canon_key = str(rel_checked).replace("\\", "/")
+        except ValueError:
+            canon_key = SSOT_SPECS["local"]["default_target"]
+        md_targets[canon_key] = render_local_ssot_canon_md(spec, today_iso)
+
     for rel_path, content in md_targets.items():
         sec_err = lint_security_payload(rel_path, content, check_stored_injection=rel_path.startswith("state/"))
         if sec_err:
@@ -332,17 +443,25 @@ def cmd_build(args: argparse.Namespace) -> int:
             sys.stderr.write(f"Build aborted ({rel_path}): {slop_err}\n")
             return 1
 
-    for rel_path, content in {
-        **md_targets,
-        "state/workspace_config.json": ws_cfg_str,
-        ".agents/hooks.json": hooks_json_str,
-    }.items():
+    for rel_path, content in {**md_targets, **raw_targets}.items():
         out_path = target_dir / rel_path
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(content, encoding="utf-8")
 
     (target_dir / "scratch").mkdir(parents=True, exist_ok=True)
     _ensure_posix_exec_bits(target_dir)
+
+    git_hook_installed = False
+    if args.install_git_hook and (target_dir / ".git").is_dir():
+        hook_p = target_dir / ".git" / "hooks" / "pre-commit"
+        hook_p.parent.mkdir(parents=True, exist_ok=True)
+        hook_p.write_text(render_git_precommit_hook(host_info, target_dir), encoding="utf-8")
+        if os.name != "nt":
+            try:
+                hook_p.chmod(hook_p.stat().st_mode | 0o111)
+            except OSError:
+                pass
+        git_hook_installed = True
 
     adr_sha, adr_bytes = file_sha256_and_size(str(target_dir / "state" / "archive_decisions.md"))
     append_locked_audit_entry(
@@ -374,6 +493,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     report["architect"] = {
         k: v for k, v in spec["architect"].items() if k != "protocols"
     }
+    report["platforms"] = selected_platforms
+    report["ssot"] = {"backend": ssot_backend, "target": ssot_target}
+    report["git_hook_installed"] = git_hook_installed
     report["host"] = host_info
     print(json.dumps(report, indent=2))
     return 0 if report.get("status") == "VERIFIED" else 1
@@ -416,15 +538,21 @@ def cmd_reset_bootstrap(args: argparse.Namespace) -> int:
         sys.stderr.write("Pass --confirm to reset workspace back to unconfigured Bootstrap Mode.\n")
         return 1
     target_dir = Path(args.target_dir).resolve()
-    tmpl = STARTER_ROOT / "templates" / "bootstrap_gemini.md"
+    tmpl = STARTER_ROOT / "templates" / "bootstrap_onboarding.md"
+    if not tmpl.is_file():
+        tmpl = STARTER_ROOT / "templates" / "bootstrap_gemini.md"
     if not tmpl.is_file():
         sys.stderr.write(f"Missing template: {tmpl}\n")
         return 1
-    shutil.copy2(tmpl, target_dir / "GEMINI.md")
+    for entry_name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+        shutil.copy2(tmpl, target_dir / entry_name)
     for rel_rm in (
         "SYSTEM_PROMPT.md",
         ".agents/hooks.json",
         ".agents/rules/state-hydration.md",
+        ".claude/settings.json",
+        ".cursor/rules/coarchitect.mdc",
+        "ssot/00_STATE_PROJECT_CANON.md",
         "state/workspace_config.json",
         "state/operator_profile.md",
         "state/routing_matrix.md",
@@ -438,6 +566,13 @@ def cmd_reset_bootstrap(args: argparse.Namespace) -> int:
         fp = target_dir / rel_rm
         if fp.is_file():
             fp.unlink()
+    for empty_dir in (".claude", ".cursor/rules", ".cursor", "ssot"):
+        dp = target_dir / empty_dir
+        try:
+            if dp.is_dir() and not any(dp.iterdir()):
+                dp.rmdir()
+        except OSError:
+            pass
     print(json.dumps({"status": "RESET_TO_BOOTSTRAP", "workspace": str(target_dir)}, indent=2))
     return 0
 
@@ -465,6 +600,9 @@ def build_parser() -> argparse.ArgumentParser:
     s_prv.add_argument("--counterweight-mbti", default="")
     s_prv.add_argument("--domains", default="")
     s_prv.add_argument("--notes", default="")
+    s_prv.add_argument("--platform", choices=PLATFORM_CHOICES, default="auto")
+    s_prv.add_argument("--ssot", choices=SSOT_CHOICES, default="local")
+    s_prv.add_argument("--ssot-target", default="")
 
     s_bld = sub.add_parser("build", help="Assemble Co-Architect, install cross-platform hooks, and verify")
     s_bld.add_argument("--target-dir", default=str(STARTER_ROOT))
@@ -478,6 +616,10 @@ def build_parser() -> argparse.ArgumentParser:
     s_bld.add_argument("--counterweight-mbti", default="")
     s_bld.add_argument("--domains", default="", help="Comma-separated focus domains")
     s_bld.add_argument("--notes", default="", help="Additional operator preferences or context")
+    s_bld.add_argument("--platform", choices=PLATFORM_CHOICES, default="auto")
+    s_bld.add_argument("--ssot", choices=SSOT_CHOICES, default="local")
+    s_bld.add_argument("--ssot-target", default="")
+    s_bld.add_argument("--install-git-hook", action="store_true")
     s_bld.add_argument("--kortex-account", default="")
     s_bld.add_argument("--notebook-id", default="")
 

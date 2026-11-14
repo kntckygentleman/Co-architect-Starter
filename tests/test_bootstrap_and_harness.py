@@ -60,42 +60,42 @@ class TestCognitiveMatrixAndScoring(unittest.TestCase):
             for marker in REQUIRED_PERSONA_MARKERS:
                 self.assertIn(marker, prompt_md, msg=f"Missing {marker} for {mbti}")
 
-    def test_entp_4w3_sosp_vs_entp_8w7_sxsp_differentiation(self) -> None:
-        spec_4w3 = synthesize_dyadic_architecture(
+    def test_entp_7w8_spsx_vs_entp_5w4_sosp_differentiation(self) -> None:
+        spec_7w8 = synthesize_dyadic_architecture(
             operator_mbti="ENTP",
-            operator_enneagram="4w3",
-            operator_instincts="so/sp",
+            operator_enneagram="7w8",
+            operator_instincts="sp/sx",
             operator_name="PartnerA",
         )
-        spec_8w7 = synthesize_dyadic_architecture(
+        spec_5w4 = synthesize_dyadic_architecture(
             operator_mbti="ENTP",
-            operator_enneagram="8w7",
-            operator_instincts="sx/sp",
+            operator_enneagram="5w4",
+            operator_instincts="so/sp",
             operator_name="PartnerB",
         )
-        self.assertEqual(spec_4w3["architect"]["mbti"], "INTJ")
-        self.assertEqual(spec_8w7["architect"]["mbti"], "INTJ")
-        self.assertEqual(spec_4w3["architect"]["enneagram"], "1w9 (with 5w4 Anchor)")
-        self.assertEqual(spec_8w7["architect"]["enneagram"], "5w6 (with 1w9 Anchor)")
-        self.assertIn("sx blind spot", spec_4w3["architect"]["bandwidth_defense_rule"])
-        self.assertIn("sp operational baseline", spec_8w7["architect"]["bandwidth_defense_rule"])
+        self.assertEqual(spec_7w8["architect"]["mbti"], "INTJ")
+        self.assertEqual(spec_5w4["architect"]["mbti"], "INTJ")
+        self.assertEqual(spec_7w8["architect"]["enneagram"], "1w9 (with 5w6 Anchor)")
+        self.assertEqual(spec_5w4["architect"]["enneagram"], "8w9 (with 3w4 Anchor)")
+        self.assertIn("high-conviction deep work", spec_7w8["architect"]["bandwidth_defense_rule"])
+        self.assertIn("sx blind spot", spec_5w4["architect"]["bandwidth_defense_rule"])
 
     def test_diagnostic_grilling_scorer(self) -> None:
         self.assertEqual(len(DIAGNOSTIC_DILEMMAS), 6)
-        res_entp = score_diagnostic_answers(
+        res_enfp = score_diagnostic_answers(
             {
                 "D1": "Ne",
                 "D2": "Fi",
                 "D3": "Ne_loop",
-                "D4": "4w3",
-                "D5": "so/sp",
+                "D4": "5w4",
+                "D5": "sp/so",
                 "D6": "studio",
             }
         )
-        self.assertEqual(res_entp["inferred_operator_mbti"], "ENFP")
-        self.assertEqual(res_entp["inferred_operator_enneagram"], "4w3")
-        self.assertEqual(res_entp["inferred_operator_instincts"], "so/sp")
-        self.assertEqual(res_entp["proposed_architecture"]["architect"]["mbti"], "INTJ")
+        self.assertEqual(res_enfp["inferred_operator_mbti"], "ENFP")
+        self.assertEqual(res_enfp["inferred_operator_enneagram"], "5w4")
+        self.assertEqual(res_enfp["inferred_operator_instincts"], "sp/so")
+        self.assertEqual(res_enfp["proposed_architecture"]["architect"]["mbti"], "INTJ")
 
         res_intp = score_diagnostic_answers(
             {
@@ -122,9 +122,11 @@ class TestHostProbeAndCrossPlatformFormatting(unittest.TestCase):
             "python_hook_invoker",
             "file_lock_backend",
             "timezone",
+            "detected_platforms",
             "sample_hook_command",
         ):
             self.assertIn(key, info)
+        self.assertIn("agents_md", info["detected_platforms"])
         self.assertIn(info["file_lock_backend"], ("fcntl", "msvcrt"))
 
     def test_hook_command_quoting_with_spaces_and_windows(self) -> None:
@@ -159,13 +161,15 @@ class TestEndToEndBootstrapHooksAndIterate(unittest.TestCase):
                     "--mbti",
                     "ENTP",
                     "--enneagram",
-                    "4w3",
+                    "7w8",
                     "--instincts",
-                    "so/sp",
+                    "sp/sx",
                     "--architect-name",
                     "Vera",
+                    "--platform",
+                    "all",
                     "--domains",
-                    "Creative Direction, Music, Events",
+                    "Systems Design, Writing, Product Strategy",
                 ],
                 text=True,
                 capture_output=True,
@@ -177,13 +181,19 @@ class TestEndToEndBootstrapHooksAndIterate(unittest.TestCase):
             self.assertEqual(rep["status"], "VERIFIED")
             self.assertEqual(rep["architect_name"], "Vera")
             self.assertEqual(rep["debug_phrase"], "[Vera Debug Mode]")
+            self.assertTrue((ws / "ssot" / "00_STATE_PROJECT_CANON.md").is_file())
+            self.assertTrue((ws / "AGENTS.md").is_file())
+            self.assertTrue((ws / "CLAUDE.md").is_file())
+            self.assertTrue((ws / "GEMINI.md").is_file())
+            self.assertTrue((ws / ".claude" / "settings.json").is_file())
+            self.assertTrue((ws / ".cursor" / "rules" / "coarchitect.mdc").is_file())
 
             hooks_script = ws / ".agents" / "scripts" / "workspace_hooks.py"
             audit_script = ws / ".agents" / "scripts" / "audit_log.py"
             iterate_script = ws / ".agents" / "skills" / "iterate" / "scripts" / "iterate_stage.py"
             env = {**os.environ, "COARCHITECT_WORKSPACE_ROOT": str(ws)}
 
-            # 1. Debug mode allows editing locked GEMINI.md; non-debug blocks shell mutation
+            # 1. Debug mode allows editing locked SYSTEM_PROMPT.md; non-debug blocks shell mutation
             shell_block = subprocess.run(
                 [sys.executable, str(hooks_script), "PreToolUse"],
                 input=json.dumps(
@@ -192,7 +202,7 @@ class TestEndToEndBootstrapHooksAndIterate(unittest.TestCase):
                         "lastUserInput": "append a line",
                         "toolCall": {
                             "name": "run_command",
-                            "args": {"CommandLine": "echo hacked >> GEMINI.md"},
+                            "args": {"CommandLine": "echo hacked >> SYSTEM_PROMPT.md"},
                         },
                     }
                 ),
@@ -212,7 +222,7 @@ class TestEndToEndBootstrapHooksAndIterate(unittest.TestCase):
                         "toolCall": {
                             "name": "edit_file",
                             "args": {
-                                "Path": str(ws / "GEMINI.md"),
+                                "Path": str(ws / "SYSTEM_PROMPT.md"),
                                 "Target": "Casey",
                                 "Replacement": "Casey",
                             },
@@ -401,9 +411,278 @@ class TestEndToEndBootstrapHooksAndIterate(unittest.TestCase):
             self.assertEqual(app_p.returncode, 0)
             self.assertIn("Updated clean version", sample_doc.read_text(encoding="utf-8"))
 
+    def test_multiplatform_obsidian_ssot_git_hook_and_claude_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "universal_ws"
+            ws.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["git", "-C", str(ws), "init", "-q"], check=True)
+            tmpl = REPO_ROOT / "templates" / "bootstrap_onboarding.md"
+            for name in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
+                (ws / name).write_text(tmpl.read_text(encoding="utf-8"), encoding="utf-8")
+
+            build_proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "bootstrap.py"),
+                    "build",
+                    "--target-dir",
+                    str(ws),
+                    "--operator-name",
+                    "Morgan",
+                    "--mbti",
+                    "INTP",
+                    "--enneagram",
+                    "5w6",
+                    "--instincts",
+                    "sp/sx",
+                    "--platform",
+                    "all",
+                    "--ssot",
+                    "obsidian",
+                    "--ssot-target",
+                    "~/Notes/ProjectCanon.md",
+                    "--install-git-hook",
+                ],
+                text=True,
+                capture_output=True,
+                timeout=20,
+                check=False,
+            )
+            self.assertEqual(build_proc.returncode, 0, msg=build_proc.stderr + "\n" + build_proc.stdout)
+            rep = json.loads(build_proc.stdout)
+            self.assertEqual(rep["status"], "VERIFIED")
+            self.assertEqual(rep["ssot"]["backend"], "obsidian")
+            self.assertEqual(rep["ssot"]["target"], "~/Notes/ProjectCanon.md")
+            self.assertTrue(rep["git_hook_installed"])
+
+            sys_txt = (ws / "SYSTEM_PROMPT.md").read_text(encoding="utf-8")
+            self.assertEqual((ws / "AGENTS.md").read_text(encoding="utf-8"), sys_txt)
+            self.assertEqual((ws / "CLAUDE.md").read_text(encoding="utf-8"), sys_txt)
+            self.assertEqual((ws / "GEMINI.md").read_text(encoding="utf-8"), sys_txt)
+            self.assertFalse((ws / "ssot" / "00_STATE_PROJECT_CANON.md").exists())
+            claude_cfg = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
+            self.assertIn("PreToolUse", claude_cfg["hooks"])
+            self.assertIn("alwaysApply: true", (ws / ".cursor" / "rules" / "coarchitect.mdc").read_text(encoding="utf-8"))
+            pre_commit = ws / ".git" / "hooks" / "pre-commit"
+            self.assertTrue(pre_commit.is_file())
+            self.assertIn("check-files --staged", pre_commit.read_text(encoding="utf-8"))
+
+            hooks_script = ws / ".agents" / "scripts" / "workspace_hooks.py"
+            env = {**os.environ, "COARCHITECT_WORKSPACE_ROOT": str(ws)}
+
+            # Claude Code Write to locked file -> exit code 2 + hookSpecificOutput deny
+            claude_lock = subprocess.run(
+                [sys.executable, str(hooks_script), "PreToolUse"],
+                input=json.dumps(
+                    {
+                        "session_id": "claude-s1",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Write",
+                        "tool_input": {"file_path": str(ws / "CLAUDE.md"), "content": "# overwrite"},
+                        "prompt": "update rules",
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(claude_lock.returncode, 2)
+            self.assertTrue(claude_lock.stderr.strip())
+            claude_lock_out = json.loads(claude_lock.stdout)
+            self.assertEqual(claude_lock_out["hookSpecificOutput"]["permissionDecision"], "deny")
+
+            # Claude Code MultiEdit anti-slop -> exit code 2
+            claude_slop = subprocess.run(
+                [sys.executable, str(hooks_script), "PreToolUse"],
+                input=json.dumps(
+                    {
+                        "session_id": "claude-s1",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "MultiEdit",
+                        "tool_input": {
+                            "file_path": str(ws / "state" / "active_sprint.md"),
+                            "edits": [{"old_string": "a", "new_string": "Wait \u2014 let us delve in."}],
+                        },
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(claude_slop.returncode, 2)
+            self.assertEqual(
+                json.loads(claude_slop.stdout)["hookSpecificOutput"]["permissionDecision"],
+                "deny",
+            )
+
+            # Claude Code Bash reading .env -> exit code 2
+            claude_bash = subprocess.run(
+                [sys.executable, str(hooks_script), "PreToolUse"],
+                input=json.dumps(
+                    {
+                        "session_id": "claude-s1",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Bash",
+                        "tool_input": {"command": "cat .env.production"},
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(claude_bash.returncode, 2)
+
+            # Claude Code Task haiku worker allowed; sonnet on research denied
+            claude_task_ok = subprocess.run(
+                [sys.executable, str(hooks_script), "PreToolUse"],
+                input=json.dumps(
+                    {
+                        "session_id": "claude-s1",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Task",
+                        "tool_input": {
+                            "subagent_type": "research",
+                            "description": "scan repo",
+                            "prompt": "Find tests",
+                            "model": "haiku",
+                        },
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(claude_task_ok.returncode, 0)
+            self.assertEqual(
+                json.loads(claude_task_ok.stdout)["hookSpecificOutput"]["permissionDecision"],
+                "allow",
+            )
+
+            claude_task_bad = subprocess.run(
+                [sys.executable, str(hooks_script), "PreToolUse"],
+                input=json.dumps(
+                    {
+                        "session_id": "claude-s1",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Agent",
+                        "tool_input": {
+                            "subagent_type": "research",
+                            "description": "scan repo",
+                            "prompt": "Find tests",
+                            "model": "sonnet",
+                        },
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(claude_task_bad.returncode, 2)
+
+            # check-files CLI blocks locked files unless COARCHITECT_DEBUG=1 and blocks slop in .md
+            chk_locked = subprocess.run(
+                [sys.executable, str(hooks_script), "check-files", str(ws / "SYSTEM_PROMPT.md")],
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(chk_locked.returncode, 1)
+
+            chk_debug = subprocess.run(
+                [sys.executable, str(hooks_script), "check-files", str(ws / "SYSTEM_PROMPT.md")],
+                text=True,
+                capture_output=True,
+                env={**env, "COARCHITECT_DEBUG": "1"},
+                check=False,
+            )
+            self.assertEqual(chk_debug.returncode, 0)
+
+            bad_note = ws / "notes.md"
+            bad_note.write_text("Clean sentence \u2014 wait no, em dash.\n", encoding="utf-8")
+            chk_slop = subprocess.run(
+                [sys.executable, str(hooks_script), "check-files", str(bad_note)],
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(chk_slop.returncode, 1)
+
+            # Claude SessionStart reports mismatch in hookSpecificOutput
+            (ws / "CLAUDE.md").write_text("# drifted\n", encoding="utf-8")
+            claude_sess = subprocess.run(
+                [sys.executable, str(hooks_script), "SessionStart"],
+                input=json.dumps({"session_id": "claude-s1", "hook_event_name": "SessionStart"}),
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            self.assertEqual(claude_sess.returncode, 0)
+            sess_data = json.loads(claude_sess.stdout)
+            self.assertEqual(sess_data["hookSpecificOutput"]["hookEventName"], "SessionStart")
+            self.assertIn("SHA-256 mismatch", sess_data["hookSpecificOutput"]["additionalContext"])
+
+            # Explicit single-platform build cleans stale bootstrap GEMINI.md; reset restores all 3
+            claude_only = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "bootstrap.py"),
+                    "reset-bootstrap",
+                    "--target-dir",
+                    str(ws),
+                    "--confirm",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(claude_only.returncode, 0)
+            self.assertTrue((ws / "AGENTS.md").is_file())
+            self.assertTrue((ws / "CLAUDE.md").is_file())
+            self.assertTrue((ws / "GEMINI.md").is_file())
+            self.assertFalse((ws / ".claude" / "settings.json").exists())
+
+            claude_single = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "bootstrap.py"),
+                    "build",
+                    "--target-dir",
+                    str(ws),
+                    "--operator-name",
+                    "Morgan",
+                    "--mbti",
+                    "INTP",
+                    "--enneagram",
+                    "5w6",
+                    "--instincts",
+                    "sp/sx",
+                    "--platform",
+                    "claude",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(claude_single.returncode, 0, msg=claude_single.stderr + "\n" + claude_single.stdout)
+            self.assertEqual(json.loads(claude_single.stdout)["status"], "VERIFIED")
+            self.assertFalse((ws / "GEMINI.md").exists())
+            self.assertTrue((ws / "ssot" / "00_STATE_PROJECT_CANON.md").is_file())
+
 
 class TestStarterRepoSlopAndZeroPII(unittest.TestCase):
     def test_all_starter_markdown_and_zero_pii(self) -> None:
+        self.assertTrue((REPO_ROOT / "llms.txt").is_file())
+        self.assertTrue((REPO_ROOT / "AGENTS.md").is_file())
+        self.assertTrue((REPO_ROOT / "CLAUDE.md").is_file())
+        self.assertTrue((REPO_ROOT / "GEMINI.md").is_file())
         hardcoded_user_path = re.compile(
             r"(?:/Users/[A-Za-z0-9_.-]+|/home/[A-Za-z0-9_.-]+|[A-Za-z]:\\\\Users\\\\[A-Za-z0-9_.-]+)"
         )
@@ -434,8 +713,9 @@ class TestStarterRepoSlopAndZeroPII(unittest.TestCase):
                     m_mail,
                     msg=f"Personal email/calendar literal '{m_mail.group(0) if m_mail else ''}' in {rel}",
                 )
-                if fn.lower().endswith(".md"):
-                    slop_err = lint_markdown_slop(rel, txt)
+                if fn.lower().endswith((".md", ".txt", ".mdc")):
+                    lint_label = rel if fn.lower().endswith(".md") else f"{rel}.md"
+                    slop_err = lint_markdown_slop(lint_label, txt)
                     self.assertIsNone(slop_err, msg=f"{rel}: {slop_err}")
                 if rel in (
                     ".agents/skills/council/references/personas.md",

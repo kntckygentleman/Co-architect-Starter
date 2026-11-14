@@ -53,11 +53,11 @@ Use this skill whenever the operator invokes `/iterate` (or asks to run an itera
 
 Read [critic_panels.md](./references/critic_panels.md) to select either the 7-seat Council (`council-*`) or a 3-seat Domain Panel (`creative-*`, `systems-*`, `growth-*`, `quant-*`):
 
-1. Register needed seats via `define_subagent` (`EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false`).
+1. Configure needed seats as read-only subagents (`define_subagent` with `EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false`, or read-only `Task`/`Agent` subagents).
 2. Draft an **Anonymized Case Brief (`<150` Words)**:
    - Strip all personal names and typology lore.
-   - **Round 1:** Point critics at `round_1_context_bundle_paths` (`Model: "pro"`).
-   - **Round 2+:** Include `[ROUND_2_DIFF]` and point the 2-seat verification pair (`<lead>` + `<scope>-entp`) at `round_<N-1>_diff_bundle.patch` (`Model: "flash"`).
+   - **Round 1:** Point critics at `round_1_context_bundle_paths` (`Model: "pro"` or `model: "sonnet"`).
+   - **Round 2+:** Include `[ROUND_2_DIFF]` and point the 2-seat verification pair (`<lead>` + `<scope>-entp`) at `round_<N-1>_diff_bundle.patch` (`Model: "flash"` or `model: "haiku"`).
    - Include: *"When zero substantive correctness, security, structural, domain, or anti-slop defects remain, begin your reply with `NO_CHANGES_REQUIRED` and make zero cosmetic churn suggestions."*
 
 ### Step 3: Tear Down Critics, Apply Fixes in Staging, & Snapshot

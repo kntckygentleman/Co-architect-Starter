@@ -15,13 +15,13 @@ description: >-
    - `/council <seat>`: Named seat(s) only (`intj`, `intp`, `entj`, `enfj`, `istj`, `isfp`, `entp`).
    - Read [personas.md](./references/personas.md) on demand for the selected `SystemPrompt` blocks.
 
-2. **Anonymized Bailiff Brief (`<150` Words, Zero Subagent Vault/MCP Calls):**
-   - Gather any needed local file or Vault facts in the parent session first.
+2. **Anonymized Bailiff Brief (`<150` Words, Zero Subagent SSoT/MCP Calls):**
+   - Gather any needed local file or SSoT facts in the parent session first.
    - Strip all personal names, cognitive typology labels, and workspace lore. State the factual constraints, resource bounds, and proposal neutrally as an anonymous citizen's scenario.
 
 3. **Clean-Room Registration & Parallel Dispatch (`Model: "pro"` Ceiling; Operator-Gated Inheritance):**
-   - Register needed seats once per session via `define_subagent` (`EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false`).
-   - Dispatch all selected seats in parallel via `invoke_subagent` (`Workspace: "inherit"`, `Model: "pro"`, `Prompt: <Anonymized Case Brief>`). Because `Model: "inherit"` clones the active Parent UI model across all spawned seats, `core_hooks.py` blocks `Model: "inherit"` unless the operator's current prompt explicitly includes `--deep`, `[DEEP_COUNCIL]`, or `[CARBON_INHERIT]` alongside `[DEEP_COUNCIL]` in the subagent prompt.
+   - Register needed seats once per session as read-only subagents (`define_subagent` with `EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false`, or read-only `Task`/`Agent` profiles).
+   - Dispatch all selected seats in parallel via `invoke_subagent` (`Workspace: "inherit"`, `Model: "pro"`, `Prompt: <Anonymized Case Brief>`) or Claude Code `Task`/`Agent` (`model: "sonnet"`). Because `Model: "inherit"` (or `opus` subagents) clones frontier planning capacity across all spawned seats, `core_hooks.py` blocks `Model: "inherit"` unless the operator's current prompt explicitly includes `--deep`, `[DEEP_COUNCIL]`, or `[CARBON_INHERIT]` alongside `[DEEP_COUNCIL]` in the subagent prompt.
 
 4. **Weighted Synthesis & Cross-Examination:**
    - Weigh the 6 primary seats at `1.0x` and `council-entp` (mandatory Devil's Advocate dissent) at `0.5x` (elevate `council-entp` to `1.0x` whenever it catches a concrete flaw missed by the primary seats).

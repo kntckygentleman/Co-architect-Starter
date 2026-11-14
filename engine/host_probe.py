@@ -105,7 +105,7 @@ def _resolve_python_command() -> tuple[str, str]:
 
 
 def format_hook_command(python_invoker: str, script_path: Path, event_name: str) -> str:
-    """Format a cross-platform command string for Antigravity .agents/hooks.json."""
+    """Format a cross-platform command string for workspace `.agents/hooks.json` or `.claude/settings.json`."""
     abs_script = str(script_path.resolve())
     if os.name == "nt":
         abs_script = abs_script.replace("\\", "/")
@@ -114,7 +114,7 @@ def format_hook_command(python_invoker: str, script_path: Path, event_name: str)
 
 
 def detect_host_environment(target_workspace: Path | None = None) -> dict[str, Any]:
-    """Inspect host OS, CPU architecture, Python runtime, shell, timezone, and Antigravity dirs."""
+    """Inspect host OS, CPU architecture, Python runtime, shell, timezone, and installed agent runtimes."""
     ws_root = (target_workspace or Path.cwd()).resolve()
     os_system = platform.system() or ("Windows" if os.name == "nt" else "POSIX")
     is_wsl = _detect_wsl() if os_system == "Linux" else False
@@ -143,6 +143,24 @@ def detect_host_environment(target_workspace: Path | None = None) -> dict[str, A
         except OSError:
             kortex_detected = False
 
+    antigravity_detected = agy_app_dir.is_dir() or agy_cfg_dir.is_dir() or bool(shutil.which("agy"))
+    detected_platforms: list[str] = []
+    if antigravity_detected:
+        detected_platforms.append("antigravity")
+    if (home_dir / ".claude").is_dir() or (ws_root / ".claude").is_dir() or bool(shutil.which("claude")):
+        detected_platforms.append("claude")
+    if (home_dir / ".cursor").is_dir() or (ws_root / ".cursor").is_dir() or bool(shutil.which("cursor")):
+        detected_platforms.append("cursor")
+    if (home_dir / ".codex").is_dir() or bool(shutil.which("codex")):
+        detected_platforms.append("codex")
+    if (
+        (home_dir / ".codeium" / "windsurf").is_dir()
+        or (ws_root / ".windsurfrules").is_file()
+        or bool(shutil.which("windsurf"))
+    ):
+        detected_platforms.append("windsurf")
+    detected_platforms.append("agents_md")
+
     hooks_script = ws_root / ".agents" / "scripts" / "workspace_hooks.py"
     return {
         "os_system": os_system,
@@ -157,7 +175,8 @@ def detect_host_environment(target_workspace: Path | None = None) -> dict[str, A
         "file_lock_backend": file_lock_backend,
         "timezone": _detect_iana_timezone(),
         "workspace_root": str(ws_root),
-        "antigravity_detected": agy_app_dir.is_dir() or agy_cfg_dir.is_dir(),
+        "antigravity_detected": antigravity_detected,
         "kortex_mcp_detected": kortex_detected,
+        "detected_platforms": detected_platforms,
         "sample_hook_command": format_hook_command(py_invoker, hooks_script, "SessionStart"),
     }

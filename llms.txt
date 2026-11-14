@@ -1,0 +1,34 @@
+# Co-Architect Starter
+
+> Portable, zero-dependency bootstrap kit (`Python 3.9+` stdlib only) that synthesizes a cognitive counterweight co-architect and enforces core locks, anti-slop checks, and tamper-evident audit logging across Claude Code, Cursor, Codex CLI, Windsurf, Antigravity, and generic `AGENTS.md` workspaces, with pluggable Single Source of Truth (SSoT) storage.
+
+When running automated setup or extracting components into another repository, treat `local` (`ssot/00_STATE_PROJECT_CANON.md`) as the default canonical store unless another backend is configured in `state/workspace_config.json`.
+
+## Onboarding & Configuration
+- [README.md](README.md): Plain-English overview, one-paste setup prompt, platform flags, and pluggable SSoT table
+- [AGENTS.md](AGENTS.md): Universal unconfigured Bootstrap Mode onboarding instructions for any agent runtime
+- [CLAUDE.md](CLAUDE.md): Identical Bootstrap Mode instructions discovered automatically by Claude Code
+- [GEMINI.md](GEMINI.md): Identical Bootstrap Mode instructions discovered automatically by Antigravity
+- [bootstrap.py](bootstrap.py): CLI implementing `detect`, `grill`, `score-quiz`, `preview`, `build`, `refresh-hydration`, `verify`, and `reset-bootstrap`
+
+## Cognitive Matrix & Rendering Engine
+- [docs/COGNITIVE_PAIRING_FRAMEWORK.md](docs/COGNITIVE_PAIRING_FRAMEWORK.md): Jungian shadow counterweight table and Enneagram/instinctual modulation rules
+- [engine/cognitive_matrix.py](engine/cognitive_matrix.py): Deterministic 16 MBTI, 18 Enneagram wing, and 6 instinct synthesis tables plus 6-dilemma scorer (`D1..D6`)
+- [engine/host_probe.py](engine/host_probe.py): Cross-platform OS, Python runtime, shell, timezone, and agent runtime detector (`antigravity`, `claude`, `cursor`, `codex`, `windsurf`, `agents_md`)
+- [engine/renderer.py](engine/renderer.py): Prompt, L1 state cache, `SSOT_SPECS` adapter (`local`, `obsidian`, `notion`, `gdrive`, `sql`, `notebooklm`, `custom`), `.claude/settings.json`, `.cursor/rules/coarchitect.mdc`, and `.git/hooks/pre-commit` generator
+
+## Runtime Hooks & Audit Kernel
+- [.agents/scripts/core_hooks.py](.agents/scripts/core_hooks.py): Shared hook logic (`normalize_hook_payload`, `evaluate_base_pre_tool_use`, `handle_post_tool_use`, `check_session_start_anomalies`, `dispatch_hook_cli`, `lint_markdown_slop`, `lint_security_payload`)
+- [.agents/scripts/workspace_hooks.py](.agents/scripts/workspace_hooks.py): Workspace adapter supporting stdin JSON lifecycle hooks (`SessionStart`, `PreToolUse`, `PostToolUse`) and CLI `check-files [--staged]` pre-commit checks
+- [.agents/scripts/audit_log.py](.agents/scripts/audit_log.py): SHA-256 hash-chained log verifier (`verify`, `summary`, `query`, `changelog`, `record-adr`, `epistemic`, `tokens`)
+- [.agents/rules/human-voice.md](.agents/rules/human-voice.md): Editorial voice and anti-slop constraints enforced by `PreToolUse` and `check-files`
+
+## Adversarial Critique Skills
+- [.agents/skills/council/SKILL.md](.agents/skills/council/SKILL.md): 7-seat Veil-of-Ignorance review workflow across Rational, Human/Somatic, and Contrarian seats
+- [.agents/skills/council/references/personas.md](.agents/skills/council/references/personas.md): Clean-room council seat prompts compatible with read-only subagents
+- [.agents/skills/iterate/SKILL.md](.agents/skills/iterate/SKILL.md): Isolated staging Evaluate -> Plan -> Stage-Execute loop
+- [.agents/skills/iterate/references/critic_panels.md](.agents/skills/iterate/references/critic_panels.md): 3-seat creative, systems, and growth critic panel prompts
+- [.agents/skills/iterate/scripts/iterate_stage.py](.agents/skills/iterate/scripts/iterate_stage.py): Sandbox staging manager for `/iterate` rounds
+
+## Optional Tests
+- [tests/test_bootstrap_and_harness.py](tests/test_bootstrap_and_harness.py): End-to-end verification covering `bootstrap.py`, multi-platform hooks, Claude Code payload normalization, pluggable SSoT outputs, `/iterate` staging, and zero-PII/anti-slop checks

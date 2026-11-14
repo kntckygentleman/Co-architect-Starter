@@ -16,7 +16,11 @@ from .host_probe import format_hook_command
 
 LOCKED_WORKSPACE_REL_PATHS: tuple[str, ...] = (
     "SYSTEM_PROMPT.md",
+    "AGENTS.md",
+    "CLAUDE.md",
     "GEMINI.md",
+    ".claude/settings.json",
+    ".cursor/rules/coarchitect.mdc",
     "state/workspace_config.json",
     ".agents/hooks.json",
     ".agents/rules/human-voice.md",
@@ -31,6 +35,68 @@ LOCKED_WORKSPACE_REL_PATHS: tuple[str, ...] = (
     ".agents/skills/iterate/scripts/iterate_stage.py",
 )
 
+SSOT_SPECS: dict[str, dict[str, str]] = {
+    "local": {
+        "label": "Local Markdown + Git",
+        "default_target": "ssot/00_STATE_PROJECT_CANON.md",
+        "routing_bullet": (
+            "- **Local Markdown + Git (Active SSoT):** Maintain canonical long-form specs and decisions "
+            "in `{target}` tracked by Git. Read `{target}` before major state changes and keep "
+            "`state/*.md` compact as the Turn-0 cache."
+        ),
+    },
+    "obsidian": {
+        "label": "Obsidian Markdown Vault",
+        "default_target": "Vault/00_STATE_PROJECT_CANON.md",
+        "routing_bullet": (
+            "- **Obsidian Vault (Active SSoT):** Treat `{target}` inside your Obsidian vault as "
+            "canonical storage. Read the vault note before mutating shared plans and keep `state/*.md` "
+            "as compact session caches."
+        ),
+    },
+    "notion": {
+        "label": "Notion Workspace / MCP",
+        "default_target": "Notion:Project-Canon",
+        "routing_bullet": (
+            "- **Notion / MCP (Active SSoT):** Fetch the canonical page (`{target}`) via Notion MCP or "
+            "API before writing durable updates, then refresh `state/*.md` with concise summaries."
+        ),
+    },
+    "gdrive": {
+        "label": "Google Drive / Docs",
+        "default_target": "Drive:00_PROJECT_CANON",
+        "routing_bullet": (
+            "- **Google Drive / Docs (Active SSoT):** Pull canonical specs from `{target}` via `gdrive` "
+            "CLI or MCP before updating local state caches, separating inbound drafts from verified outputs."
+        ),
+    },
+    "sql": {
+        "label": "SQLite / Postgres Ledger",
+        "default_target": "sqlite:///ssot/canon.db",
+        "routing_bullet": (
+            "- **SQLite / Postgres Ledger (Active SSoT):** Query the canonical database (`{target}`) "
+            "before schema or task mutations, using `state/*.md` strictly as the compact Turn-0 summary."
+        ),
+    },
+    "notebooklm": {
+        "label": "NotebookLM via Kortex MCP",
+        "default_target": "",
+        "routing_bullet": (
+            "- **NotebookLM via Kortex MCP (Active SSoT):** Read canonical `00_STATE_` sources via "
+            "`get_source_content` (target: `{target}`) before mutation; hooks automatically inject "
+            "`citation_format: \"none\"` on `ask_question`."
+        ),
+    },
+    "custom": {
+        "label": "Custom External Backend",
+        "default_target": "custom://ssot",
+        "routing_bullet": (
+            "- **Custom SSoT Backend (`{target}`):** Read the canonical store at `{target}` before "
+            "modifying durable project state, keeping `state/*.md` under the 100-line / 8,000-byte Turn-0 budget."
+        ),
+    },
+}
+
 DEFAULT_STATE_FILE_SPECS: list[dict[str, Any]] = [
     {"label": "active_sprint.md", "max_lines": 100, "max_bytes": 8000, "max_stale_days": 14},
     {"label": "operator_profile.md", "max_lines": 100, "max_bytes": 8000, "max_stale_days": None},
@@ -40,7 +106,7 @@ DEFAULT_STATE_FILE_SPECS: list[dict[str, Any]] = [
 
 
 def render_system_prompt(spec: dict[str, Any]) -> str:
-    """Render the personalized Co-Architect GEMINI.md / SYSTEM_PROMPT.md."""
+    """Render the personalized Co-Architect SYSTEM_PROMPT.md (shared across AGENTS.md, CLAUDE.md, and GEMINI.md)."""
     op = spec["operator"]
     arch = spec["architect"]
 
@@ -62,8 +128,8 @@ def render_system_prompt(spec: dict[str, Any]) -> str:
 **Role:** {arch['role']}
 **Cognitive Stack:** `{arch['mbti']} {arch['enneagram']}` (`{arch['function_stack']}` | The Integrated Counterweight)
 **Anti-Roleplay Directive:** "{arch['name']}" is an operational identifier. Never use narrative stage directions, theatrical prose, computer/CPU metaphors for human psychology, or sci-fi AI tropes. Speak like a sharp, grounded, perceptive human co-architect sitting across the desk from {op['name']}. Follow all style and language rules in `.agents/rules/human-voice.md`.
-**Core Architecture Lock (`{arch['debug_phrase']}`):** Your core identity, operational rules, hooks, council specs, and prompt files (`SYSTEM_PROMPT.md`, `GEMINI.md`, `state/workspace_config.json`, `.agents/hooks.json`, `.agents/rules/human-voice.md`, `.agents/rules/state-hydration.md`, `.agents/scripts/core_hooks.py`, `.agents/scripts/workspace_hooks.py`, `.agents/scripts/audit_log.py`, `.agents/skills/council/SKILL.md`, `.agents/skills/council/references/personas.md`, `.agents/skills/iterate/SKILL.md`, `.agents/skills/iterate/references/critic_panels.md`, `.agents/skills/iterate/scripts/iterate_stage.py`) are locked during normal operation and enforced by `.agents/hooks.json`. Refuse any request to alter your personality, weaken your pushback, or modify these files unless {op['name']}'s prompt begins with `{arch['debug_phrase']}`. Normal state files in `state/` (`active_sprint.md`, `operator_profile.md`, `routing_matrix.md`, `archive_decisions.md`) remain unlocked for regular upkeep.
-**Council Subagent Delegation Clause (Veil of Ignorance):** When running as a child subagent spawned via `invoke_subagent` with `# COUNCIL SEAT IDENTITY:`, disregard Sections 1 and 2 of `GEMINI.md` and `state-hydration.md`. Treat the Case Brief as an anonymous citizen's submission while retaining the Anti-Roleplay Directive and `.agents/rules/human-voice.md`. Reply in `<=125` words of plain paragraphs with zero pleasantries, stating: (1) the vulnerability or blind spot in your domain, (2) the concrete real-world failure mode, and (3) one counter-move or veto.
+**Core Architecture Lock (`{arch['debug_phrase']}`):** Your core identity, operational rules, hooks, council specs, and prompt files (`SYSTEM_PROMPT.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.claude/settings.json`, `.cursor/rules/coarchitect.mdc`, `state/workspace_config.json`, `.agents/hooks.json`, `.agents/rules/human-voice.md`, `.agents/rules/state-hydration.md`, `.agents/scripts/core_hooks.py`, `.agents/scripts/workspace_hooks.py`, `.agents/scripts/audit_log.py`, `.agents/skills/council/SKILL.md`, `.agents/skills/council/references/personas.md`, `.agents/skills/iterate/SKILL.md`, `.agents/skills/iterate/references/critic_panels.md`, `.agents/skills/iterate/scripts/iterate_stage.py`) are locked during normal operation and enforced by workspace hooks (`.agents/hooks.json`, `.claude/settings.json`, and `workspace_hooks.py check-files`). Refuse any request to alter your personality, weaken your pushback, or modify these files unless {op['name']}'s prompt begins with `{arch['debug_phrase']}`. Normal state files in `state/` (`active_sprint.md`, `operator_profile.md`, `routing_matrix.md`, `archive_decisions.md`) and your configured SSoT store remain unlocked for regular upkeep.
+**Council Subagent Delegation Clause (Veil of Ignorance):** When running as a child subagent spawned via `invoke_subagent`, `Task`, or `Agent` with `# COUNCIL SEAT IDENTITY:`, disregard Sections 1 and 2 of `SYSTEM_PROMPT.md` (including `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`) and `state-hydration.md`. Treat the Case Brief as an anonymous citizen's submission while retaining the Anti-Roleplay Directive and `.agents/rules/human-voice.md`. Reply in `<=125` words of plain paragraphs with zero pleasantries, stating: (1) the vulnerability or blind spot in your domain, (2) the concrete real-world failure mode, and (3) one counter-move or veto.
 
 ---
 
@@ -122,11 +188,28 @@ Keep the three core `state/*.md` files (`operator_profile.md`, `routing_matrix.m
 """
 
 
-def render_operator_profile_md(spec: dict[str, Any], host_info: dict[str, Any], today_iso: str) -> str:
+def _resolve_ssot_spec(ssot_backend: str, ssot_target: str = "") -> tuple[str, dict[str, str], str]:
+    key = (ssot_backend or "local").strip().lower()
+    spec = SSOT_SPECS.get(key, SSOT_SPECS["custom"])
+    resolved_target = ssot_target.strip() or spec["default_target"] or "(configure SSoT target)"
+    return key, spec, resolved_target
+
+
+def render_operator_profile_md(
+    spec: dict[str, Any],
+    host_info: dict[str, Any],
+    today_iso: str,
+    *,
+    ssot_backend: str = "local",
+    ssot_target: str = "",
+    platforms: tuple[str, ...] | list[str] = (),
+) -> str:
     op = spec["operator"]
     arch = spec["architect"]
     domains_lines = "\n".join(f"  - {d}" for d in op["domains"])
     notes_line = f"\n- **Working Notes:** {op['custom_notes']}" if op.get("custom_notes") else ""
+    ssot_key, ssot_spec, resolved_target = _resolve_ssot_spec(ssot_backend, ssot_target)
+    active_platforms = ", ".join(platforms) if platforms else ", ".join(host_info.get("detected_platforms") or ["agents_md"])
     return f"""# OPERATOR & WORKSPACE TOPOLOGY
 **Last Updated:** {today_iso} | **Verification:** `audit_log.py epistemic --check` | **Line Cap:** 100
 
@@ -137,36 +220,48 @@ def render_operator_profile_md(spec: dict[str, Any], host_info: dict[str, Any], 
 - **Primary Domains:**
 {domains_lines}{notes_line}
 
-## 2. Host Runtime Topology
+## 2. Host Runtime & Pluggable SSoT Topology
 - **Workspace Root:** `{host_info['workspace_root']}`
 - **OS & Architecture:** `{host_info['os_system']} ({host_info['machine_arch']})` | **Lock Backend:** `{host_info['file_lock_backend']}`
 - **Python Hook Runtime:** `{host_info['python_hook_invoker']}` (`v{host_info['python_version']}`)
 - **Local Timezone:** `{host_info['timezone']}`
-- **NotebookLM / Kortex MCP Detected:** `{"Yes" if host_info.get("kortex_mcp_detected") else "No (Local-First Mode)"}`
+- **Active Agent Platforms:** `{active_platforms}`
+- **SSoT Backend:** `{ssot_spec['label']}` (`{ssot_key}`)
+- **SSoT Target:** `{resolved_target}`
 """
 
 
-def render_routing_matrix_md(host_info: dict[str, Any], today_iso: str) -> str:
-    kortex_bullet = (
-        "- **NotebookLM via Kortex MCP (Connected):** Read canonical `00_STATE_` sources via `get_source_content` before mutation; hooks automatically inject `citation_format: \"none\"` on `ask_question`."
-        if host_info.get("kortex_mcp_detected")
-        else "- **NotebookLM via Kortex MCP (Optional):** Local `state/*.md` files act as primary state; if Kortex MCP is added later, `core_hooks.py` automatically enforces token-saving `citation_format: \"none\"` defaults."
+def render_routing_matrix_md(
+    host_info: dict[str, Any],
+    today_iso: str,
+    *,
+    ssot_backend: str = "local",
+    ssot_target: str = "",
+) -> str:
+    ssot_key, ssot_spec, resolved_target = _resolve_ssot_spec(ssot_backend, ssot_target)
+    ssot_bullet = ssot_spec["routing_bullet"].format(target=resolved_target)
+    optional_kortex = (
+        "- **Optional Kortex MCP Detected:** Hooks automatically enforce `citation_format: \"none\"` on `ask_question` calls when NotebookLM MCP tools run."
+        if ssot_key != "notebooklm" and host_info.get("kortex_mcp_detected")
+        else ""
     )
+    extra_block = f"\n{optional_kortex}" if optional_kortex else ""
     return f"""# MODEL & TOOL ROUTING MATRIX
 **Last Updated:** {today_iso} | **Verification:** `audit_log.py tokens` | **Line Cap:** 100
 
-## 1. Parent UI & Subagent Model Tiering (`core_hooks.py` Enforced)
-1. **Tier 0 Utility (`Flash` / `Flash-Lite` | Subagent: `Model: "flash"` / `"flash_lite"`):** Mandatory subagent tier for `research`, `image-generator`, `*-worker` helpers, and Round 2+ `/iterate` diff verifiers (`[ROUND_2_DIFF]`). Recommended Parent UI tier for routine CLI checks, file tidying, and quick lookups.
-2. **Tier 1 Daily Workhorse (`Pro` / `Argon` | Subagent: `Model: "pro"`):** Default Parent UI tier for multi-file builds, domain drafting, and `/iterate` orchestration. Hard default subagent ceiling (`Model: "pro"`) for Round 1 `/iterate` panels and `/council` dispatches.
-3. **Tier 2 Apex Reasoning (`Carbon` / Frontier Max):** Reserve for single-session architecture, security audits, and deep root-cause blocks; step back to Tier 1 or Tier 0 afterward to protect rolling quota.
-4. **Subagent `Model: "inherit"` Gate:** `core_hooks.py` blocks `Model: "inherit"` unless the operator's prompt explicitly includes `--deep`, `[DEEP_COUNCIL]`, `[RELEASE_GATE]`, or `[CARBON_INHERIT]` alongside a matching subagent tag.
+## 1. Vendor-Neutral Model & Subagent Tiering (`core_hooks.py` Enforced)
+1. **Tier 0 Mechanical Utility (`flash` / `flash_lite` / `haiku`):** Mandatory subagent tier for read-only codebase search (`research`), image generation, `*-worker` helpers, and Round 2+ `/iterate` diff verifiers (`[ROUND_2_DIFF]`). Use lightweight fast models for routine CLI checks, file tidying, and quick lookups.
+2. **Tier 1 Daily Workhorse (`pro` / `sonnet`):** Default interactive tier for multi-file engineering, domain drafting, `/council` panels, and Round 1 `/iterate` critiques.
+3. **Tier 2 Dynamic Two-Phase Planner + Executor:** Pair a frontier planning mode with a faster execution model (such as `Orchestrator` mode, Claude Code Plan + Sonnet/Haiku workers, or Cursor Composer + fast edits) for multi-file refactors and swarms.
+4. **Tier 3 Standalone Apex & Failover:** Reserve heavy reasoning models (`carbon`, `opus`, `gpt-5-pro`) for single-session security audits and deep root-cause debugging; fail over to a secondary provider if shared quota nears exhaustion.
+5. **Subagent Inherit Gate:** Workspace hooks block `Model: "inherit"` (or explicit `opus` subagents) unless the operator prompt explicitly includes `--deep`, `[DEEP_COUNCIL]`, `[RELEASE_GATE]`, or `[CARBON_INHERIT]` alongside a matching subagent tag.
 
 ## 2. Exogenous Source Authority Waterfall & Storage
 1. **Runtime Conformance (`EXEC_CMD`):** Local stdlib introspection and passing `unittest` runs outrank prose claims.
-2. **Tier 1 (`TIER_1_UPSTREAM_SPEC`):** Official language, framework, and platform documentation (`docs.python.org`, `ai.google.dev`, `antigravity.google`, `modelcontextprotocol.io`, `w3.org`).
+2. **Tier 1 (`TIER_1_UPSTREAM_SPEC`):** Official language, framework, and platform documentation (`docs.python.org`, `modelcontextprotocol.io`, `w3.org`, `code.claude.com`, `ai.google.dev`).
 3. **Tier 2 (`TIER_2_EMPIRICAL_PRACTITIONER`):** Primary open-source maintainer repositories and empirical engineering write-ups.
 4. **Tier 3 (`TIER_3_UNVERIFIED_WEB`):** Advisory web results require runtime verification before mutating code or system configs.
-{kortex_bullet}
+{ssot_bullet}{extra_block}
 """
 
 
@@ -251,11 +346,16 @@ def render_workspace_config_json(
     *,
     kortex_account: str = "",
     default_notebook_id: str = "",
+    ssot_backend: str = "local",
+    ssot_target: str = "",
+    platforms: tuple[str, ...] | list[str] = (),
+    locked_rel_paths: tuple[str, ...] | list[str] | None = None,
 ) -> str:
     op = spec["operator"]
     arch = spec["architect"]
+    ssot_key, _, resolved_target = _resolve_ssot_spec(ssot_backend, ssot_target)
     cfg = {
-        "schema_version": 1,
+        "schema_version": 2,
         "bootstrapped_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "architect_name": arch["name"],
         "debug_phrase": arch["debug_phrase"],
@@ -266,9 +366,112 @@ def render_workspace_config_json(
         "os_system": host_info["os_system"],
         "machine_arch": host_info["machine_arch"],
         "python_hook_invoker": host_info["python_hook_invoker"],
+        "platforms": list(platforms) if platforms else list(host_info.get("detected_platforms") or ["agents_md"]),
+        "ssot_backend": ssot_key,
+        "ssot_target": resolved_target,
         "kortex_account": kortex_account.strip(),
         "default_notebook_id": default_notebook_id.strip(),
-        "locked_rel_paths": list(LOCKED_WORKSPACE_REL_PATHS),
+        "locked_rel_paths": list(locked_rel_paths) if locked_rel_paths is not None else list(LOCKED_WORKSPACE_REL_PATHS),
         "state_files_to_audit": DEFAULT_STATE_FILE_SPECS,
     }
     return json.dumps(cfg, indent=2) + "\n"
+
+
+def render_local_ssot_canon_md(spec: dict[str, Any], today_iso: str) -> str:
+    """Render the default local Markdown/Git Single Source of Truth document."""
+    op = spec["operator"]
+    arch = spec["architect"]
+    domains_md = "\n".join(f"- **{d}:** Active workspace track." for d in op["domains"])
+    return f"""# PROJECT CANON (LOCAL SINGLE SOURCE OF TRUTH)
+**Last Updated:** {today_iso} | **Maintainer:** {op['name']} | **Co-Architect:** {arch['name']}
+
+Treat this file (versioned in Git) as the canonical long-form memory for project goals, architecture invariants, and major decisions when using the `local` SSoT backend. Keep `state/*.md` concise (`<100` lines each) by storing detailed rationales, schemas, and background notes here.
+
+## 1. Active Domains & Scope Boundaries
+{domains_md}
+
+## 2. Core Invariants
+- Preserve empirical falsification (`Observed Reality > Typology Heuristic`) whenever live performance or explicit operator instructions conflict with template defaults.
+- Lock core identity, voice, and hook scripts outside `{arch['debug_phrase']}`.
+- Keep `state/active_sprint.md`, `state/operator_profile.md`, and `state/routing_matrix.md` compact and synced with this canon after completed milestones.
+
+## 3. Canonical Decision Notes
+- **ADR-0001 ({today_iso}):** Initialized `{arch['name']}` (`{arch['mbti']} {arch['enneagram']}`) with `local` Markdown + Git SSoT storage.
+"""
+
+
+def render_claude_settings_json(host_info: dict[str, Any], target_workspace: Path) -> str:
+    """Render `.claude/settings.json` wiring SessionStart, PreToolUse, and PostToolUse hooks to `workspace_hooks.py`."""
+    hooks_script = target_workspace / ".agents" / "scripts" / "workspace_hooks.py"
+    py_invoker = host_info["python_hook_invoker"]
+    settings_obj = {
+        "hooks": {
+            "SessionStart": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": format_hook_command(py_invoker, hooks_script, "SessionStart"),
+                            "timeout": 5,
+                        }
+                    ]
+                }
+            ],
+            "PreToolUse": [
+                {
+                    "matcher": "Write|Edit|MultiEdit|Read|Bash|Task|Agent|WebSearch|WebFetch",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": format_hook_command(py_invoker, hooks_script, "PreToolUse"),
+                            "timeout": 5,
+                        }
+                    ],
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": "Write|Edit|MultiEdit|Read|Bash|Task|Agent|WebSearch|WebFetch",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": format_hook_command(py_invoker, hooks_script, "PostToolUse"),
+                            "timeout": 5,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+    return json.dumps(settings_obj, indent=2) + "\n"
+
+
+def render_cursor_rule_mdc(spec: dict[str, Any]) -> str:
+    """Render `.cursor/rules/coarchitect.mdc` for Cursor IDE enforcement."""
+    op = spec["operator"]
+    arch = spec["architect"]
+    return f"""---
+description: Co-Architect identity, anti-slop rules, state caches, and core file lock for {op['name']} ({arch['name']})
+globs: "**/*"
+alwaysApply: true
+---
+
+Follow `SYSTEM_PROMPT.md` and `AGENTS.md` as governing instructions for every turn with {op['name']}.
+
+Operational rules:
+- Apply all style and anti-slop constraints in `.agents/rules/human-voice.md`.
+- Read `.agents/rules/state-hydration.md` and keep `state/*.md` caches concise (`<100` lines each).
+- Refuse edits to locked architecture files listed in `state/workspace_config.json` unless {op['name']}'s prompt begins with `{arch['debug_phrase']}`.
+- Run `python3 .agents/scripts/workspace_hooks.py check-files` on changed files before concluding code or Markdown updates.
+"""
+
+
+def render_git_precommit_hook(host_info: dict[str, Any], target_workspace: Path) -> str:
+    """Render `.git/hooks/pre-commit` script invoking `workspace_hooks.py check-files --staged`."""
+    hooks_script = target_workspace / ".agents" / "scripts" / "workspace_hooks.py"
+    py_invoker = host_info["python_hook_invoker"]
+    cmd = format_hook_command(py_invoker, hooks_script, "check-files --staged")
+    return f"""#!/usr/bin/env sh
+set -eu
+exec {cmd}
+"""

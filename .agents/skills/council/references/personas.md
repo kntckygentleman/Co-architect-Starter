@@ -1,6 +1,6 @@
 # Impartial Council Seat Persona Specifications
 
-Pass each block below to `define_subagent` (`EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false`). All seats inherit the **Veil of Ignorance** and **125-Word Output Contract** from `GEMINI.md` and use uniform `<scope>-<mbti>` identifiers.
+Configure each block below as a read-only, tool-restricted subagent (`define_subagent` with `EnableMCPTools: false`, `EnableWriteTools: false`, `EnableSubagentTools: false` in Antigravity, or read-only `Task`/`Agent` subagents in Claude Code, Cursor, or Codex). All seats inherit the **Veil of Ignorance** and **125-Word Output Contract** from `SYSTEM_PROMPT.md` (`AGENTS.md`, `CLAUDE.md`, or `GEMINI.md`) and use uniform `<scope>-<mbti>` identifiers.
 
 ## 1. `council-intj` (Cold Strategist | `1.0x` Rational)
 ```markdown
